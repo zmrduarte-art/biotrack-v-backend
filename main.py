@@ -76,13 +76,13 @@ async def add_security_headers(request: Request, call_next):
     return response
 
 
-# Documentación interactiva en modo oscuro limpio (solo fuera de producción)
+# Documentación interactiva en modo oscuro y español (solo fuera de producción)
 if ENV != "production":
     @app.get("/docs", include_in_schema=False)
     def custom_swagger_ui():
         html = get_swagger_ui_html(
             openapi_url="/openapi.json",
-            title="BioTrack V — API Docs",
+            title="BioTrack V — Documentación API",
             swagger_ui_parameters={
                 "defaultModelsExpandDepth": -1,
                 "docExpansion": "list",
@@ -90,12 +90,12 @@ if ENV != "production":
             },
         ).body.decode("utf-8")
 
-        dark_css = """
+        custom_ui = """
         <style>
           body, .swagger-ui { background: #0f172a !important; color: #e2e8f0 !important; font-family: system-ui, -apple-system, sans-serif; }
           .swagger-ui .topbar { background: #020617 !important; border-bottom: 1px solid #1e293b; }
-          .swagger-ui .info .title, .swagger-ui .opblock-tag, .swagger-ui label, .swagger-ui .parameter__name, .swagger-ui table thead tr th { color: #f8fafc !important; }
-          .swagger-ui .info p, .swagger-ui .opblock-description-wrapper p, .swagger-ui .response-col_description, .swagger-ui .parameter__type { color: #cbd5e1 !important; }
+          .swagger-ui .info .title, .swagger-ui .opblock-tag, .swagger-ui label, .swagger-ui .parameter__name, .swagger-ui table thead tr th, .swagger-ui .opblock-section-header h4 { color: #f8fafc !important; }
+          .swagger-ui .info p, .swagger-ui .opblock-description-wrapper p, .swagger-ui .response-col_description, .swagger-ui .parameter__type, .swagger-ui .dialog-ux .modal-ux-content p { color: #cbd5e1 !important; }
           .swagger-ui .opblock { background: #1e293b !important; border-color: #334155 !important; border-radius: 8px; }
           .swagger-ui .opblock .opblock-summary-description, .swagger-ui .opblock .opblock-summary-path, .swagger-ui .tab li { color: #f1f5f9 !important; }
           .swagger-ui .opblock-section-header { background: #0f172a !important; }
@@ -106,8 +106,51 @@ if ENV != "production":
           .swagger-ui .dialog-ux .modal-ux-header h3 { color: #f8fafc !important; }
           .swagger-ui .response-col_status { color: #38bdf8 !important; }
         </style>
+        <script>
+          const dict = {
+            "Authorize": "Autorizar",
+            "Available authorizations": "Autorizaciones disponibles",
+            "Close": "Cerrar",
+            "Logout": "Cerrar sesión",
+            "Try it out": "Probar",
+            "Cancel": "Cancelar",
+            "Execute": "Ejecutar",
+            "Clear": "Limpiar",
+            "Parameters": "Parámetros",
+            "No parameters": "Sin parámetros",
+            "Request body": "Cuerpo de la petición",
+            "Responses": "Respuestas",
+            "Server response": "Respuesta del servidor",
+            "Response body": "Cuerpo de la respuesta",
+            "Response headers": "Cabeceras de respuesta",
+            "Code": "Código",
+            "Description": "Descripción",
+            "Name": "Nombre",
+            "Download": "Descargar",
+            "Example Value": "Ejemplo",
+            "Schema": "Esquema",
+            "Request URL": "URL de la petición",
+            "Successful Response": "Respuesta exitosa",
+            "Validation Error": "Error de validación"
+          };
+          function traducirUI() {
+            document.querySelectorAll("button, span, h3, h4, th, p, a").forEach(el => {
+              if (el.childNodes.length === 1 && el.childNodes[0].nodeType === 3) {
+                const txt = el.textContent.trim();
+                if (dict[txt]) el.textContent = dict[txt];
+              }
+            });
+            const filtro = document.querySelector(".operation-filter-input");
+            if (filtro) filtro.placeholder = "Filtrar endpoints por módulo...";
+          }
+          const obs = new MutationObserver(traducirUI);
+          window.addEventListener("DOMContentLoaded", () => {
+            obs.observe(document.body, { childList: true, subtree: true });
+            traducirUI();
+          });
+        </script>
         """
-        return HTMLResponse(html.replace("</head>", f"{dark_css}</head>"))
+        return HTMLResponse(html.replace("</head>", f"{custom_ui}</head>"))
 
 
 @app.on_event("startup")
@@ -142,13 +185,13 @@ def registrar_auditoria(
     db.add(log)
 
 
-@app.get("/", tags=["0. Estado del Sistema"])
+@app.get("/", tags=["0. Estado del Sistema"], summary="Verificar estado del servicio")
 def health_check():
     return {"status": "online", "sistema": "BioTrack V API", "normativa": "ISO 27001 / OWASP"}
 
 
 # RF01: Autenticación y emisión de JWT (Rate limit 5/min - CP-06)
-@app.post("/api/auth/login", tags=["1. Autenticación"])
+@app.post("/api/auth/login", tags=["1. Autenticación"], summary="Iniciar sesión y obtener token JWT")
 @limiter.limit("5/minute")
 def login(request: Request, data: LoginRequest, db: Session = Depends(get_db)):
     user = db.query(Usuario).filter(Usuario.email == data.email, Usuario.activo == True).first()
@@ -169,7 +212,7 @@ def login(request: Request, data: LoginRequest, db: Session = Depends(get_db)):
 
 
 # Consulta segura de insumos (Previene SQLi - CP-04)
-@app.get("/api/insumos", tags=["2. Catálogo y Equipos"])
+@app.get("/api/insumos", tags=["2. Catálogo y Equipos"], summary="Listar o buscar insumos críticos")
 def listar_insumos(q: Optional[str] = None, current=Depends(get_current_user), db: Session = Depends(get_db)):
     query = db.query(Insumo)
     if q:
@@ -177,18 +220,18 @@ def listar_insumos(q: Optional[str] = None, current=Depends(get_current_user), d
     return query.all()
 
 
-@app.get("/api/equipos", tags=["2. Catálogo y Equipos"])
+@app.get("/api/equipos", tags=["2. Catálogo y Equipos"], summary="Listar equipos de refrigeración")
 def listar_equipos(current=Depends(get_current_user), db: Session = Depends(get_db)):
     return db.query(EquipoRefrigeracion).all()
 
 
 # RF02: Listar y crear lotes ordenados por vencimiento (FEFO - CP-05)
-@app.get("/api/lotes", tags=["3. Inventario y Despacho FEFO"])
+@app.get("/api/lotes", tags=["3. Inventario y Despacho FEFO"], summary="Listar lotes ordenados por vencimiento (FEFO)")
 def listar_lotes(current=Depends(get_current_user), db: Session = Depends(get_db)):
     return db.query(Lote).order_by(Lote.fecha_vencimiento.asc()).all()
 
 
-@app.post("/api/lotes", status_code=201, tags=["3. Inventario y Despacho FEFO"])
+@app.post("/api/lotes", status_code=201, tags=["3. Inventario y Despacho FEFO"], summary="Registrar ingreso de nuevo lote")
 def crear_lote(
     data: LoteCreate,
     request: Request,
@@ -222,7 +265,7 @@ def crear_lote(
 
 
 # RF05: Despacho automático bajo regla FEFO (CP-03)
-@app.post("/api/lotes/despacho", tags=["3. Inventario y Despacho FEFO"])
+@app.post("/api/lotes/despacho", tags=["3. Inventario y Despacho FEFO"], summary="Despachar insumo bajo regla FEFO")
 def despachar_fefo(
     data: DespachoFEFORequest,
     request: Request,
@@ -279,7 +322,7 @@ def despachar_fefo(
 
 
 # RF06: Liberar lote en cuarentena o aprobar merma (Solo Químico Farmacéutico - CP-01)
-@app.post("/api/lotes/liberar", tags=["3. Inventario y Despacho FEFO"])
+@app.post("/api/lotes/liberar", tags=["3. Inventario y Despacho FEFO"], summary="Liberar cuarentena o aprobar merma (Solo QF)")
 def gestionar_cuarentena(
     data: LiberarCuarentenaRequest,
     request: Request,
@@ -309,7 +352,7 @@ def gestionar_cuarentena(
 
 
 # RF03 y RF04: Registro de temperatura y bloqueo automático en CUARENTENA (CP-02)
-@app.post("/api/temperaturas", status_code=201, tags=["4. Cadena de Frío"])
+@app.post("/api/temperaturas", status_code=201, tags=["4. Cadena de Frío"], summary="Registrar temperatura y validar excursión")
 def registrar_temperatura(
     data: TemperaturaCreate,
     request: Request,
@@ -355,6 +398,6 @@ def registrar_temperatura(
 
 
 # RF07: Consulta de bitácora de auditoría inmutable
-@app.get("/api/auditoria", tags=["5. Auditoría ISO 27001"])
+@app.get("/api/auditoria", tags=["5. Auditoría ISO 27001"], summary="Consultar bitácora de auditoría inmutable")
 def ver_auditoria(current=Depends(get_current_user), db: Session = Depends(get_db)):
     return db.query(AuditoriaLog).order_by(AuditoriaLog.id_log.desc()).limit(100).all()

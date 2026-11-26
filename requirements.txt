@@ -6,3 +6,4 @@ pydantic[email]
 python-dotenv
 pyjwt
 bcrypt
+slowapi
